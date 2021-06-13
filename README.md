@@ -1,6 +1,3 @@
-(Distinct from localcrypto_v1, which only uses threads, not sockets.)
-
-localcrypto is a cryptocurrency simulator. It simulates a naive
-blockchain network on the local network.
+localcrypto is a naive cryptocurrency, created for the intellectual exercise.
 
 # TODO: Finish this
