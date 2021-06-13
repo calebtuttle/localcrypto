@@ -1,0 +1,2 @@
+cryptography==3.4.7
+pycryptodomex==3.10.1
