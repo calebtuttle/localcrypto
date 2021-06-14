@@ -15,7 +15,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends.interfaces import DERSerializationBackend
 
 from localcrypto import utils
 from localcrypto.constants import (HEADER, REQUEST_BLOCKCHAIN, REQUEST_BLOCK, 
@@ -529,14 +528,16 @@ class MiningNode():
         client_socket.settimeout(300) # timeout after 5 minutes
         while True:
             try:
-                self.receive_message(client_socket)
+                msg = utils.receive_message(client_socket)
+                self.handle_message(msg, client_socket)
             except socket.timeout:
                 # Ping client. If client responds within 30s, continue 
                 # looping, else exit.
                 utils.send(PING_CALL)
                 try:
                     client_socket.settimeout(30)
-                    self.receive_message(client_socket)
+                    msg = utils.receive_message(client_socket)
+                    self.handle_message(msg, client_socket)
                     client_socket.settimeout(300)
                 except socket.timeout:
                     client_socket.close()
@@ -547,12 +548,6 @@ class MiningNode():
                 break
         print(f'[DISCONNECTED] Neighbor {address} disconnected')
         self.neighbors.remove(client_socket)
-
-    def receive_message(self, client_socket):
-        msg_len = client_socket.recv(HEADER).decode('utf-8')
-        msg_len = int(msg_len)
-        msg = client_socket.recv(msg_len)
-        self.handle_message(msg, client_socket)
 
     def handle_message(self, msg, client_socket):
         obj = pickle.loads(msg)
@@ -611,6 +606,12 @@ class MiningNode():
             # print(f'{self.name}: invalid transaction ... {tx}')
             self.invalid_txs = (self.invalid_txs) + (tx,)
 
+        # TODO: Implement the extraction of transaction fees via the difference
+        #       between a tx's total input amount and total output amount.
+        #       This will require an update of the receive_block() method because
+        #       each node that receives a block must verify that the miner is not
+        #       extracting more transaction fees than is acceptable. 
+
     def receive_block(self, block):
         ''' 
         Receive a block and determine whether it is the next 
@@ -654,6 +655,8 @@ class Wallet():
         self.public_key = self.__private_key.public_key()
         self.address = hash_pub_key(self.public_key)
 
+        self.blockchain = ()
+
         # transactions that have already been used as inputs for other transactions
         self.spent_txs = []
 
@@ -671,29 +674,57 @@ class Wallet():
         message = sha256(address_bytes+timestamp_bytes+amounts_bytes+recipients_bytes).digest()
         signature = self.__private_key.sign(message, ec.ECDSA(hashes.SHA256()))
         srlzd_pub_key = serialize_pub_key(self.public_key)
+
         tx = Transaction(signature, message, srlzd_pub_key, inpt_tx, recipients, amounts)
         self.spent_txs.append(inpt_tx)
         return tx
 
+    def get_blockchain(self, node_address):
+        '''
+        Get a blockchain from a node. Stores the blockchain as self.blockchain.
+
+        node_address: tuple
+            The first element must be an IPv4 address represented as a string,
+            the second element a port number represented as an int.
+
+        Returns the blockchain if successful, None otherwise.
+        '''
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect(node_address)
+        utils.send(REQUEST_BLOCKCHAIN, client_socket)
+        return self._receive_blockchain(client_socket)
+
+    def _receive_blockchain(self, socket):
+        '''
+        socket : socket object
+            A socket connected to a mining node; the same socket used to send 
+            a request to the node.
+        '''
+        msg = utils.receive_message(socket)
+        obj = pickle.loads(msg)
+
+        if not isinstance(obj, tuple):
+            return None
+
+        are_blocks = [isinstance(item, Block) for item in obj]
+        if not all(are_blocks):
+            return None
+
+        return obj
+
     def get_unspent_txs(self):
         '''
-        NOTE: This method is not finished.
+        Search self.blockchain for transactions sent to this wallet's address
+        that have not been spent.
 
-        Request a list of all transactions sent to this wallet's address
-        (i.e., where tx.recipient == self.address).
-        Also request a list of all transactions where this user is the sender
-        (i.e., where tx.inpt_tx.recipient == self.address).
-        Return the transactions that have not been spent (i.e., the difference
-        between the first list and the second).
+        Return the transactions that have not been spent if successful, None otherwise.
         '''
-        return
-        # TODO: Request main_blockchain from a node.
-
         received = []
-        for block in blockchain:
+        for block in self.blockchain:
             for tx in block.transactions:
-                if tx.recipient == self.address:
-                    received.append(tx)
+                for r in tx.recipients:
+                    if r == self.address:
+                        received.append(tx)
         
         return [tx for tx in received if tx not in self.spent_txs]
         
