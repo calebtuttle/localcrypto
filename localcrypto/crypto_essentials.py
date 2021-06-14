@@ -9,49 +9,18 @@ import socket
 import threading
 from hashlib import sha256
 
-from Cryptodome.Hash import RIPEMD160
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import serialization
 
 from localcrypto import utils
-from localcrypto.constants import (HEADER, REQUEST_BLOCKCHAIN, REQUEST_BLOCK, 
+from localcrypto.constants import (REQUEST_BLOCKCHAIN, REQUEST_BLOCK, 
 REQUEST_TX, PING_CALL, PING_RESPONSE)
 
 
-def hash_pub_key(public_key):
-    '''
-    Generates and returns a hash of public_key. The 
-    result of this hash is also called the "address".
-    
-    public_key : a EllipticCurvePublicKey object from the cryptography library
-        A public key
-        
-    Returns RIPEMD160(SHA256(public_key)).
-        dtype : bytes
-    '''
-    pub_key_hash = public_key.public_bytes(encoding=serialization.Encoding.X962, 
-                                           format=serialization.PublicFormat.UncompressedPoint)
-    pub_key_hash = sha256(pub_key_hash).digest()
-    return RIPEMD160.new(pub_key_hash).hexdigest()
 
-def serialize_pub_key(public_key):
-    '''
-    public_key : EllipticCurvePublicKey object from cryptography library
-    '''
-    return public_key.public_bytes(encoding=serialization.Encoding.DER,
-                    format=serialization.PublicFormat.SubjectPublicKeyInfo)
-
-def deserialize_pub_key(public_key):
-    '''
-    public_key : EllipticCurvePublicKey object from cryptography library
-    '''
-    return serialization.load_der_public_key(data=public_key,
-                                            backend=None)
-
-# TODO: Implement the ability to partially spend UTXOs
+# TODO: Implement the ability to partially spend UTXOs. [DONE]
 # TODO: After doing the above, implement the ability to send transaction fees to miners
 # TODO: Change the mining protocol so that a block is mined every t minutes and the
 #       target difficulty of new blocks are adjusted to meet this goal.
@@ -98,7 +67,7 @@ class Transaction():
         return f'transaction{self.tx_id}.{self.signature[:24]}'
 
     def pretty_print(self):
-        sender = hash_pub_key(self.public_key)
+        sender = utils.hash_pub_key(self.public_key)
         print(f'{sender} sent {self.amount} to {self.recipient}.')
         print(f'Transaction... {self}')
         print(f'inpt_tx... {self.inpt_tx}')
@@ -147,7 +116,7 @@ class CoinBase():
         amounts_bytes = b''.join([bytes(a) for a in amounts])
         message = sha256(b'coinbase'+timestamp+amounts_bytes+recipients_bytes).digest()
         signature = self.__private_key.sign(message, ec.ECDSA(hashes.SHA256()))
-        srlzd_pub_key = serialize_pub_key(self.public_key)
+        srlzd_pub_key = utils.serialize_pub_key(self.public_key)
         # Create transaction
         return Transaction(signature, message, srlzd_pub_key, inpt_tx, recipients, amounts)
 
@@ -270,8 +239,8 @@ class MiningNode():
         '''
         signature = tx.signature
         message = tx.message
-        public_key = deserialize_pub_key(tx.public_key)
-        sender_address = hash_pub_key(public_key)
+        public_key = utils.deserialize_pub_key(tx.public_key)
+        sender_address = utils.hash_pub_key(public_key)
         recipients = tx.recipients
         amounts = tx.amounts
         inpt_tx = tx.inpt_tx
@@ -653,7 +622,7 @@ class Wallet():
                                                    backend=default_backend()
                                                   )
         self.public_key = self.__private_key.public_key()
-        self.address = hash_pub_key(self.public_key)
+        self.address = utils.hash_pub_key(self.public_key)
 
         self.blockchain = ()
 
@@ -673,7 +642,7 @@ class Wallet():
         amounts_bytes = b''.join([bytes(a) for a in amounts])
         message = sha256(address_bytes+timestamp_bytes+amounts_bytes+recipients_bytes).digest()
         signature = self.__private_key.sign(message, ec.ECDSA(hashes.SHA256()))
-        srlzd_pub_key = serialize_pub_key(self.public_key)
+        srlzd_pub_key = utils.serialize_pub_key(self.public_key)
 
         tx = Transaction(signature, message, srlzd_pub_key, inpt_tx, recipients, amounts)
         self.spent_txs.append(inpt_tx)
