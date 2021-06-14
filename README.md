@@ -10,7 +10,7 @@ To install all necessary Python packages, run
 
     pip install -r requirements.txt
 
-while in the localcrypto directory.
+while in the outermost localcrypto directory.
 
 ## Running an example
 First, while in the outermost localcrypto directory, run the following command:
