@@ -38,3 +38,8 @@ def send(obj, client_socket):
     client_socket.send(msg_len)
     client_socket.send(msg)
 
+def receive_message(client_socket):
+    msg_len = client_socket.recv(HEADER).decode('utf-8')
+    msg_len = int(msg_len)
+    msg = client_socket.recv(msg_len)
+    return msg
