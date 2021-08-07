@@ -1,4 +1,4 @@
-localcrypto is a naive cryptocurrency, created for the intellectual exercise.
+localcrypto is a naive cryptocurrency, created for the intellectual exercise. This project allowed me to demonstrate to myself that I can implement the most essential features of bitcoin.
 
 It is a work in progress. Currently, it only provides the tools for running a node and sending transactions with a wallet. It does not include a finalized script for actually doing those things. 
 
